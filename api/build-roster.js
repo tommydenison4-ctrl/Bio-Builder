@@ -721,8 +721,3 @@ export default async function handler(req, res) {
     });
   }
 }
-          : error?.message ||
-            'Roster build failed.'
-    });
-  }
-}
