@@ -10,15 +10,20 @@ function send(res, status, payload) {
 }
 
 async function readBody(req) {
-  if (req.body && typeof req.body === 'object') return req.body;
-  if (typeof req.body === 'string') return JSON.parse(req.body || '{}');
+  if (req.body && typeof req.body === 'object') {
+    return req.body;
+  }
+
+  if (typeof req.body === 'string') {
+    return JSON.parse(req.body || '{}');
+  }
 
   let raw = '';
 
   for await (const chunk of req) {
     raw += chunk;
 
-    if (raw.length > 100_000) {
+    if (raw.length > 100000) {
       throw new Error('Request too large.');
     }
   }
@@ -26,10 +31,11 @@ async function readBody(req) {
   return raw ? JSON.parse(raw) : {};
 }
 
-const clean = (value) =>
-  String(value ?? '')
+function clean(value) {
+  return String(value ?? '')
     .replace(/\s+/g, ' ')
     .trim();
+}
 
 function absolute(value, base) {
   try {
@@ -41,8 +47,14 @@ function absolute(value, base) {
 
 function isPrivateIp(ip) {
   if (!net.isIP(ip)) return true;
-  if (ip === '::1' || ip === '0.0.0.0') return true;
-  if (/^(10|127|169\.254|192\.168)\./.test(ip)) return true;
+
+  if (
+    ip === '::1' ||
+    ip === '0.0.0.0' ||
+    /^(10|127|169\.254|192\.168)\./.test(ip)
+  ) {
+    return true;
+  }
 
   const private172 = ip.match(/^172\.(\d+)\./);
 
@@ -90,233 +102,232 @@ async function validateUrl(raw) {
   return url;
 }
 
-function firstText($card, selectors) {
-  for (const selector of selectors) {
-    const value = clean(
-      $card.find(selector).first().text()
-    );
+function textBetween(text, startLabel, endLabels) {
+  const start = text.indexOf(startLabel);
 
-    if (value) {
-      return value;
+  if (start === -1) {
+    return '';
+  }
+
+  const contentStart = start + startLabel.length;
+  let contentEnd = text.length;
+
+  for (const endLabel of endLabels) {
+    const index = text.indexOf(endLabel, contentStart);
+
+    if (index !== -1 && index < contentEnd) {
+      contentEnd = index;
     }
   }
 
-  return '';
+  return clean(text.slice(contentStart, contentEnd));
 }
 
-function firstAttr($card, selectors, attributes) {
-  for (const selector of selectors) {
-    const node = $card.find(selector).first();
+function buildProfileMap($, base) {
+  const profiles = new Map();
 
-    if (!node.length) continue;
+  $('a[href*="/sports/football/roster/"]').each(
+    (_, element) => {
+      const link = $(element);
+      const href = absolute(link.attr('href'), base);
 
-    for (const attribute of attributes) {
-      const value = clean(node.attr(attribute));
+      let text = clean(link.text());
 
-      if (value) {
-        return value;
+      text = text
+        .replace(/^Full Bio for\s+/i, '')
+        .replace(/^Jersey Number\s+\d+\s*/i, '')
+        .replace(
+          /^Expand for more info about\s+/i,
+          ''
+        )
+        .trim();
+
+      if (
+        href &&
+        text &&
+        !/^Jersey Number$/i.test(text) &&
+        text.length < 100
+      ) {
+        profiles.set(text.toLowerCase(), href);
       }
     }
-  }
-
-  return '';
-}
-
-function stripLabel(value, labels) {
-  let result = clean(value);
-
-  for (const label of labels) {
-    result = result.replace(
-      new RegExp(`^${label}\\s*:?\\s*`, 'i'),
-      ''
-    );
-  }
-
-  return clean(result);
-}
-
-function parsePlayerCard($, element, base) {
-  const $card = $(element);
-
-  let number = firstText($card, [
-    '.sidearm-roster-player-jersey-number',
-    '.sidearm-roster-player-jersey',
-    '[class*="jersey-number"]',
-    '[class*="jersey"]'
-  ]);
-
-  number =
-    stripLabel(number, [
-      'Jersey Number',
-      'No\\.',
-      '#'
-    ]).match(/\d{1,3}/)?.[0] || '';
-
-  let name = firstText($card, [
-    '.sidearm-roster-player-name',
-    '.sidearm-roster-player-name a',
-    '[class*="player-name"]',
-    'h3 a',
-    'h3',
-    'h2 a',
-    'h2'
-  ]);
-
-  name = name
-    .replace(/^Full Bio for\s+/i, '')
-    .replace(/^Expand for more info about\s+/i, '')
-    .trim();
-
-  let position = firstText($card, [
-    '.sidearm-roster-player-position',
-    '[class*="position"]'
-  ]);
-
-  position = stripLabel(position, [
-    'Position',
-    'Pos\\.'
-  ]);
-
-  let playerClass = firstText($card, [
-    '.sidearm-roster-player-academic-year',
-    '.sidearm-roster-player-class',
-    '[class*="academic-year"]',
-    '[class*="class"]'
-  ]);
-
-  playerClass = stripLabel(playerClass, [
-    'Academic Year',
-    'Class',
-    'Year'
-  ]);
-
-  let height = firstText($card, [
-    '.sidearm-roster-player-height',
-    '[class*="height"]'
-  ]);
-
-  height = stripLabel(height, [
-    'Height',
-    'Ht\\.'
-  ]);
-
-  let weight = firstText($card, [
-    '.sidearm-roster-player-weight',
-    '[class*="weight"]'
-  ]);
-
-  weight = stripLabel(weight, [
-    'Weight',
-    'Wt\\.'
-  ]).replace(/\s*lbs?\.?$/i, '');
-
-  let hometown = firstText($card, [
-    '.sidearm-roster-player-hometown',
-    '[class*="hometown"]'
-  ]);
-
-  hometown = stripLabel(hometown, [
-    'Hometown'
-  ]);
-
-  let previousSchool = firstText($card, [
-    '.sidearm-roster-player-previous-school',
-    '.sidearm-roster-player-highschool',
-    '.sidearm-roster-player-last-school',
-    '[class*="previous-school"]',
-    '[class*="last-school"]',
-    '[class*="highschool"]'
-  ]);
-
-  previousSchool = stripLabel(previousSchool, [
-    'Previous School',
-    'Last School',
-    'High School'
-  ]);
-
-  let profile = firstAttr(
-    $card,
-    [
-      '.sidearm-roster-player-name a',
-      'a[href*="/sports/football/roster/"]',
-      'a[href*="/roster/"]'
-    ],
-    ['href']
   );
 
-  profile = absolute(profile, base);
+  return profiles;
+}
 
-  let image = firstAttr(
-    $card,
-    ['img'],
-    [
-      'data-src',
-      'data-original',
-      'data-lazy-src',
-      'src'
-    ]
-  );
+function buildImageMap($, base) {
+  const images = new Map();
 
-  image = absolute(image, base);
+  $('img').each((_, element) => {
+    const image = $(element);
 
-  if (!name) {
-    return null;
-  }
+    const alt = clean(image.attr('alt'))
+      .replace(/^Photo of\s+/i, '')
+      .replace(/^Headshot of\s+/i, '')
+      .trim();
 
-  return {
-    number,
-    name,
-    position,
-    class: playerClass,
-    height,
-    weight,
-    hometown,
-    previousSchool,
-    image,
-    profile,
-    bio: ''
-  };
+    const source =
+      image.attr('data-src') ||
+      image.attr('data-original') ||
+      image.attr('data-lazy-src') ||
+      image.attr('src') ||
+      '';
+
+    if (
+      alt &&
+      source &&
+      alt.length < 100
+    ) {
+      images.set(
+        alt.toLowerCase(),
+        absolute(source, base)
+      );
+    }
+  });
+
+  return images;
 }
 
 function parseRoster(html, base) {
   const $ = cheerio.load(html);
 
-  const selectors = [
-    '.sidearm-roster-player',
-    'li.sidearm-roster-player',
-    '[class*="sidearm-roster-player"]'
+  const profiles = buildProfileMap($, base);
+  const images = buildImageMap($, base);
+
+  let text = clean($('body').text());
+
+  const labels = [
+    'Jersey Number',
+    'Position',
+    'Academic Year',
+    'Height',
+    'Weight',
+    'Custom Field 1',
+    'Hometown',
+    'Last School',
+    'Previous School',
+    'Full Bio for',
+    'Expand for more info about'
   ];
 
-  let cards = $();
-
-  for (const selector of selectors) {
-    const found = $(selector);
-
-    if (found.length > cards.length) {
-      cards = found;
-    }
+  for (const label of labels) {
+    text = text.replace(
+      new RegExp(label, 'gi'),
+      ` ${label} `
+    );
   }
 
+  text = clean(text);
+
+  const blocks = text.split(/\s+Jersey Number\s+/i);
   const players = [];
   const seen = new Set();
 
-  cards.each((_, element) => {
-    const player = parsePlayerCard(
-      $,
-      element,
-      base
+  for (let index = 1; index < blocks.length; index += 1) {
+    const block = clean(blocks[index]);
+
+    const numberMatch = block.match(/^(\d{1,3})\s+/);
+
+    if (!numberMatch) {
+      continue;
+    }
+
+    const number = numberMatch[1];
+    const afterNumber = clean(
+      block.slice(numberMatch[0].length)
     );
 
-    if (!player) return;
+    const positionIndex =
+      afterNumber.indexOf('Position');
+
+    if (positionIndex === -1) {
+      continue;
+    }
+
+    const name = clean(
+      afterNumber.slice(0, positionIndex)
+    );
+
+    const position = textBetween(
+      afterNumber,
+      'Position',
+      ['Academic Year']
+    );
+
+    const playerClass = textBetween(
+      afterNumber,
+      'Academic Year',
+      ['Height']
+    );
+
+    const height = textBetween(
+      afterNumber,
+      'Height',
+      ['Weight']
+    );
+
+    let weight = textBetween(
+      afterNumber,
+      'Weight',
+      ['Custom Field 1', 'Hometown']
+    );
+
+    weight = weight.replace(/\s*lbs?\.?$/i, '');
+
+    const hometown = textBetween(
+      afterNumber,
+      'Hometown',
+      ['Last School', 'Previous School']
+    );
+
+    let previousSchool = textBetween(
+      afterNumber,
+      'Last School',
+      ['Full Bio for']
+    );
+
+    if (!previousSchool) {
+      previousSchool = textBetween(
+        afterNumber,
+        'Previous School',
+        ['Full Bio for']
+      );
+    }
+
+    if (
+      !name ||
+      !position ||
+      name.length > 100
+    ) {
+      continue;
+    }
 
     const key =
-      `${player.number}|${player.name.toLowerCase()}`;
+      `${number}|${name.toLowerCase()}`;
 
-    if (seen.has(key)) return;
+    if (seen.has(key)) {
+      continue;
+    }
 
     seen.add(key);
-    players.push(player);
-  });
+
+    players.push({
+      number,
+      name,
+      position,
+      class: playerClass,
+      height,
+      weight,
+      hometown,
+      previousSchool,
+      image:
+        images.get(name.toLowerCase()) || '',
+      profile:
+        profiles.get(name.toLowerCase()) || '',
+      bio: ''
+    });
+  }
 
   return players;
 }
@@ -326,7 +337,7 @@ export default async function handler(req, res) {
     return send(res, 200, {
       ok: true,
       service: 'ncaa-roster-builder',
-      version: '1.5'
+      version: '1.6'
     });
   }
 
@@ -344,7 +355,7 @@ export default async function handler(req, res) {
 
     const timeout = setTimeout(() => {
       controller.abort();
-    }, 15_000);
+    }, 15000);
 
     let response;
 
@@ -376,15 +387,12 @@ export default async function handler(req, res) {
     const base =
       response.url || rosterUrl.href;
 
-    const players = parseRoster(
-      html,
-      base
-    );
+    const players = parseRoster(html, base);
 
     if (!players.length) {
       return send(res, 422, {
         error:
-          'The page loaded, but no football roster player cards were recognized.'
+          'The page loaded, but no roster player blocks were recognized.'
       });
     }
 
