@@ -1,6 +1,6 @@
 {
   "name": "ncaa-roster-builder",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
   "engines": {
