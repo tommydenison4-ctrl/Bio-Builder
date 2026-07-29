@@ -1,10 +1,9 @@
 {
-  "name": "bio-builder",
-  "version": "1.0.0",
-  "private": true
+  "name": "ncaa-roster-builder",
+  "version": "1.2.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "cheerio": "^1.1.2"
+  }
 }
-$('build').onclick=()=>buildRoster({onProgress:()=>{}});
-$('saveCsv').onclick=saveCsv;$('saveJson').onclick=saveJson;$('search').oninput=render;
-</script>
-</body>
-</html>
