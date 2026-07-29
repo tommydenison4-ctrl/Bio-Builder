@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>NCAA Roster Builder</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <div>
+      <h1>NCAA Roster Builder</h1>
+      <p>Paste an official football roster page and create the CSV or JSON used by Special Teams Intelligence.</p>
+    </div>
+    <span class="badge">Desktop Utility V1.0</span>
+  </header>
+
+  <main>
+    <section class="card">
+      <label for="rosterUrl">Official roster URL</label>
+      <div class="urlRow">
+        <input id="rosterUrl" placeholder="https://school.com/sports/football/roster">
+        <button id="buildBtn">Build Roster</button>
+      </div>
+      <label class="check"><input id="biosCheck" type="checkbox" checked> Fetch player bios and missing profile photos</label>
+      <div id="status" class="status">Ready.</div>
+      <div class="progress"><div id="progressBar"></div></div>
+    </section>
+
+    <section class="stats">
+      <div class="stat"><strong id="playerCount">0</strong><span>Players</span></div>
+      <div class="stat"><strong id="photoCount">0</strong><span>Photos</span></div>
+      <div class="stat"><strong id="bioCount">0</strong><span>Bios</span></div>
+      <div class="actions">
+        <button id="saveCsvBtn" disabled>Save CSV</button>
+        <button id="saveJsonBtn" disabled>Save JSON</button>
+      </div>
+    </section>
+
+    <section class="card tableCard">
+      <div class="tableHeader">
+        <h2>Roster Preview</h2>
+        <input id="search" placeholder="Search players">
+      </div>
+      <div class="tableWrap">
+        <table>
+          <thead><tr><th>#</th><th>Player</th><th>Pos</th><th>Class</th><th>Height</th><th>Weight</th><th>Hometown</th><th>Previous School</th><th>Photo</th><th>Bio</th></tr></thead>
+          <tbody id="rosterBody"><tr><td colspan="10" class="empty">No roster loaded.</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

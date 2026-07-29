@@ -1,0 +1,33 @@
+{
+  "name": "ncaa-roster-builder",
+  "version": "1.1.0",
+  "description": "Desktop utility that converts official college football roster pages into CSV and JSON.",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --win portable"
+  },
+  "dependencies": {
+    "cheerio": "^1.1.2"
+  },
+  "devDependencies": {
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.footballintelligence.rosterbuilder",
+    "productName": "NCAA Roster Builder",
+    "files": [
+      "main.js",
+      "preload.cjs",
+      "renderer.js",
+      "index.html",
+      "styles.css",
+      "package.json"
+    ],
+    "win": {
+      "target": "portable"
+    }
+  }
+}
