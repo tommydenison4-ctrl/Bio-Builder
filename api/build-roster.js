@@ -16,18 +16,12 @@ async function readBody(req) {
   let raw = '';
   for await (const chunk of req) {
     raw += chunk;
-    if (raw.length > 100_000) {
-      throw new Error('Request too large.');
-    }
+    if (raw.length > 100_000) throw new Error('Request too large.');
   }
-
   return raw ? JSON.parse(raw) : {};
 }
 
-const clean = (value) =>
-  String(value ?? '')
-    .replace(/\s+/g, ' ')
-    .trim();
+const clean = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
 
 function absolute(value, base) {
   try {
@@ -43,7 +37,6 @@ function isPrivateIp(ip) {
   if (/^(10|127|169\.254|192\.168)\./.test(ip)) return true;
 
   const private172 = ip.match(/^172\.(\d+)\./);
-
   if (
     private172 &&
     Number(private172[1]) >= 16 &&
@@ -64,25 +57,17 @@ async function validateUrl(raw) {
     throw new Error('Enter a valid roster URL.');
   }
 
-  if (
-    !/^https?:$/.test(url.protocol) ||
-    url.username ||
-    url.password
-  ) {
+  if (!/^https?:$/.test(url.protocol) || url.username || url.password) {
     throw new Error('That URL is not allowed.');
   }
 
-  const records = await dns.lookup(url.hostname, {
-    all: true
-  });
+  const records = await dns.lookup(url.hostname, { all: true });
 
   if (
     !records.length ||
     records.some((record) => isPrivateIp(record.address))
   ) {
-    throw new Error(
-      'That roster host is not publicly reachable.'
-    );
+    throw new Error('That roster host is not publicly reachable.');
   }
 
   return url;
@@ -101,58 +86,51 @@ function buildProfileMaps($, base) {
   const profileByName = new Map();
   const imageByProfile = new Map();
 
-  $(
-    'a[href*="/sports/football/roster/"], a[href*="/roster/"]'
-  ).each((_, node) => {
-    const link = $(node);
-    const text = clean(link.text());
-    const href = absolute(link.attr('href') || '', base);
+  $('a[href*="/sports/football/roster/"], a[href*="/roster/"]').each(
+    (_, node) => {
+      const link = $(node);
+      const text = clean(link.text());
+      const href = absolute(link.attr('href') || '', base);
 
-    if (!href || !text) return;
+      if (!href || !text) return;
 
-    const name = text
-      .replace(/^Full Bio for\s+/i, '')
-      .replace(/^Jersey Number\s+\d+\s*/i, '')
-      .trim();
+      const name = text
+        .replace(/^Full Bio for\s+/i, '')
+        .replace(/^Jersey Number\s+\d+\s*/i, '')
+        .trim();
 
-    if (
-      name &&
-      !/^Jersey Number\b/i.test(text) &&
-      !/^Expand\b/i.test(text) &&
-      name.length <= 120
-    ) {
-      profileByName.set(name.toLowerCase(), href);
-    }
-
-    let current = link;
-
-    for (
-      let level = 0;
-      level < 7 && current.length;
-      level += 1
-    ) {
-      const image = current.find('img').first();
-
-      if (image.length) {
-        const source =
-          image.attr('data-src') ||
-          image.attr('data-original') ||
-          image.attr('data-lazy-src') ||
-          image.attr('src') ||
-          '';
-
-        if (source) {
-          imageByProfile.set(
-            href,
-            absolute(source, base)
-          );
-          break;
-        }
+      if (
+        name &&
+        !/^Jersey Number\b/i.test(text) &&
+        !/^Expand\b/i.test(text) &&
+        name.length <= 120
+      ) {
+        profileByName.set(name.toLowerCase(), href);
       }
 
-      current = current.parent();
+      let current = link;
+
+      for (let level = 0; level < 7 && current.length; level += 1) {
+        const image = current.find('img').first();
+
+        if (image.length) {
+          const source =
+            image.attr('data-src') ||
+            image.attr('data-original') ||
+            image.attr('data-lazy-src') ||
+            image.attr('src') ||
+            '';
+
+          if (source) {
+            imageByProfile.set(href, absolute(source, base));
+            break;
+          }
+        }
+
+        current = current.parent();
+      }
     }
-  });
+  );
 
   return {
     profileByName,
@@ -162,22 +140,14 @@ function buildProfileMaps($, base) {
 
 function parseSidearmRoster(html, base) {
   const $ = cheerio.load(html);
-
-  const {
-    profileByName,
-    imageByProfile
-  } = buildProfileMaps($, base);
-
-  const pageText = addLabelSpacing(
-    $('body').text()
-  );
+  const { profileByName, imageByProfile } = buildProfileMaps($, base);
+  const pageText = addLabelSpacing($('body').text());
 
   const pattern =
     /Jersey Number\s+(\d{1,3})\s+(.+?)\s+Position\s+(.+?)\s+Academic Year\s+(.+?)\s+Height\s+(.+?)\s+Weight\s+(.+?)\s+(?:Custom Field 1\s+.*?\s+)?Hometown\s+(.+?)\s+Last School\s+(.+?)\s+Full Bio for\s+(.+?)(?=\s+Expand for more info about|\s+Jersey Number\s+\d+|$)/gi;
 
   const players = [];
   const seen = new Set();
-
   let match;
 
   while ((match = pattern.exec(pageText))) {
@@ -186,10 +156,7 @@ function parseSidearmRoster(html, base) {
     const position = clean(match[3]);
     const playerClass = clean(match[4]);
     const height = clean(match[5]);
-    const weight = clean(match[6]).replace(
-      /\s*lbs?\.?$/i,
-      ''
-    );
+    const weight = clean(match[6]).replace(/\s*lbs?\.?$/i, '');
     const hometown = clean(match[7]);
     const previousSchool = clean(match[8]);
     const bioName = clean(match[9]);
@@ -202,15 +169,9 @@ function parseSidearmRoster(html, base) {
       continue;
     }
 
-    const profile =
-      profileByName.get(name.toLowerCase()) || '';
-
-    const image = profile
-      ? imageByProfile.get(profile) || ''
-      : '';
-
-    const key =
-      `${number}|${name.toLowerCase()}`;
+    const profile = profileByName.get(name.toLowerCase()) || '';
+    const image = profile ? imageByProfile.get(profile) || '' : '';
+    const key = `${number}|${name.toLowerCase()}`;
 
     if (seen.has(key)) continue;
 
@@ -234,105 +195,12 @@ function parseSidearmRoster(html, base) {
   return players;
 }
 
-async function enrichProfiles(
-  players,
-  limit = 120
-) {
-  let nextIndex = 0;
-
-  const workerCount = Math.min(
-    12,
-    players.length
-  );
-
-  const workers = Array.from(
-    {
-      length: workerCount
-    },
-    async () => {
-      while (
-        nextIndex <
-        Math.min(players.length, limit)
-      ) {
-        const index = nextIndex;
-        nextIndex += 1;
-
-        const player = players[index];
-
-        if (
-          !player.profile ||
-          (player.image && player.bio)
-        ) {
-          continue;
-        }
-
-        try {
-          const response = await fetch(
-            player.profile,
-            {
-              headers: {
-                'user-agent': 'Mozilla/5.0',
-                accept: 'text/html'
-              }
-            }
-          );
-
-          if (!response.ok) continue;
-
-          const html = await response.text();
-          const $ = cheerio.load(html);
-
-          if (!player.image) {
-            const image =
-              $(
-                'meta[property="og:image"]'
-              ).attr('content') ||
-              $(
-                'img[class*="bio"]'
-              ).first().attr('src') ||
-              $(
-                'img[class*="roster"]'
-              ).first().attr('src') ||
-              '';
-
-            player.image = absolute(
-              image,
-              player.profile
-            );
-          }
-
-          const bio = clean(
-            $(
-              '.sidearm-roster-player-bio, .s-person-details, article'
-            )
-              .first()
-              .text()
-          );
-
-          if (bio) {
-            player.bio = bio.slice(
-              0,
-              1200
-            );
-          }
-        } catch {
-          // Keep the player even if one profile page fails.
-        }
-      }
-    }
-  );
-
-  await Promise.all(workers);
-
-  return players;
-}
-
 export default async function handler(req, res) {
   if (req.method === 'GET') {
     return send(res, 200, {
       ok: true,
       service: 'ncaa-roster-builder',
-      version: '1.3'
+      version: '1.4'
     });
   }
 
@@ -344,18 +212,10 @@ export default async function handler(req, res) {
 
   try {
     const requestBody = await readBody(req);
+    const rosterUrl = await validateUrl(requestBody.url);
 
-    const rosterUrl = await validateUrl(
-      requestBody.url
-    );
-
-    const controller =
-      new AbortController();
-
-    const timer = setTimeout(
-      () => controller.abort(),
-      20_000
-    );
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20_000);
 
     let response;
 
@@ -366,10 +226,8 @@ export default async function handler(req, res) {
         headers: {
           'user-agent':
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36',
-          accept:
-            'text/html,application/xhtml+xml',
-          'accept-language':
-            'en-US,en;q=0.9'
+          accept: 'text/html,application/xhtml+xml',
+          'accept-language': 'en-US,en;q=0.9'
         }
       });
     } finally {
@@ -378,32 +236,19 @@ export default async function handler(req, res) {
 
     if (!response.ok) {
       return send(res, 502, {
-        error:
-          `Roster website returned HTTP ${response.status}.`
+        error: `Roster website returned HTTP ${response.status}.`
       });
     }
 
     const html = await response.text();
-
-    const base =
-      response.url || rosterUrl.href;
-
-    let players = parseSidearmRoster(
-      html,
-      base
-    );
+    const base = response.url || rosterUrl.href;
+    const players = parseSidearmRoster(html, base);
 
     if (!players.length) {
       return send(res, 422, {
         error:
           'The page loaded, but no football roster players were recognized.'
       });
-    }
-
-    if (requestBody.fetchProfiles) {
-      players = await enrichProfiles(
-        players
-      );
     }
 
     return send(res, 200, {
@@ -416,8 +261,7 @@ export default async function handler(req, res) {
       error:
         error?.name === 'AbortError'
           ? 'The roster website took too long to respond.'
-          : error?.message ||
-            'Roster build failed.'
+          : error?.message || 'Roster build failed.'
     });
   }
 }
