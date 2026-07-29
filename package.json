@@ -1,33 +1,122 @@
-{
-  "name": "ncaa-roster-builder",
-  "version": "1.1.0",
-  "description": "Desktop utility that converts official college football roster pages into CSV and JSON.",
-  "main": "main.js",
-  "type": "module",
-  "scripts": {
-    "start": "electron .",
-    "build:win": "electron-builder --win portable"
-  },
-  "dependencies": {
-    "cheerio": "^1.1.2"
-  },
-  "devDependencies": {
-    "electron": "^37.2.0",
-    "electron-builder": "^26.0.12"
-  },
-  "build": {
-    "appId": "com.footballintelligence.rosterbuilder",
-    "productName": "NCAA Roster Builder",
-    "files": [
-      "main.js",
-      "preload.cjs",
-      "renderer.js",
-      "index.html",
-      "styles.css",
-      "package.json"
-    ],
-    "win": {
-      "target": "portable"
-    }
-  }
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NCAA Roster Builder V1.1</title>
+<style>
+:root{--bg:#0d1118;--panel:#171d28;--panel2:#202838;--text:#f4f7fb;--muted:#9fb0c5;--accent:#d94a8c;--line:#344158;--good:#58d68d;--bad:#ff7b7b}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(135deg,#0b1017,#151b28);color:var(--text);font-family:Arial,Helvetica,sans-serif}
+.wrap{max-width:1400px;margin:auto;padding:28px}.top{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;margin-bottom:22px}
+h1{margin:0 0 6px;font-size:34px}.sub{color:var(--muted)}.badge{border:1px solid var(--line);padding:10px 15px;border-radius:18px;background:var(--panel)}
+.card{background:rgba(23,29,40,.96);border:1px solid var(--line);border-radius:16px;padding:20px;margin-bottom:18px}
+label{display:block;color:var(--muted);font-weight:700;margin-bottom:8px}.row{display:grid;grid-template-columns:1fr auto;gap:12px}
+input,button{font:inherit;border-radius:10px;border:1px solid var(--line)}input{width:100%;padding:13px;background:#0f1520;color:var(--text)}
+button{padding:12px 18px;background:var(--panel2);color:var(--text);font-weight:700;cursor:pointer}button.primary{background:var(--accent);border-color:var(--accent)}
+button:disabled{opacity:.45;cursor:not-allowed}.check{display:flex;gap:9px;align-items:center;margin-top:12px;color:var(--text);font-weight:400}.check input{width:auto}
+.status{margin-top:14px;color:var(--muted)}.status.good{color:var(--good)}.status.bad{color:var(--bad)}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,150px));gap:12px;margin:18px 0}.stat{background:var(--panel2);border:1px solid var(--line);border-radius:14px;text-align:center;padding:18px}.stat strong{font-size:30px;display:block}.stat span{color:var(--muted)}
+.actions{display:flex;gap:10px;flex-wrap:wrap}.previewHead{display:flex;justify-content:space-between;gap:15px;align-items:center}.previewHead input{max-width:320px}
+.tableWrap{overflow:auto;max-height:62vh;border:1px solid var(--line);border-radius:12px}table{width:100%;border-collapse:collapse;min-width:1050px}
+th,td{text-align:left;padding:11px;border-bottom:1px solid var(--line);vertical-align:top}th{position:sticky;top:0;background:#202838;z-index:1}.photo{width:42px;height:42px;object-fit:cover;border-radius:50%;background:#0f1520}
+.bio{max-width:310px;color:var(--muted);font-size:13px}.empty{padding:30px;text-align:center;color:var(--muted)}
+@media(max-width:700px){.wrap{padding:14px}.top{display:block}.badge{display:inline-block;margin-top:12px}.row{grid-template-columns:1fr}.stats{grid-template-columns:repeat(3,1fr)}h1{font-size:27px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div><h1>NCAA Roster Builder</h1><div class="sub">Paste an official football roster page and create the CSV or JSON used by Special Teams Intelligence.</div></div>
+    <div class="badge">Desktop Utility V1.1 Fixed</div>
+  </div>
+
+  <div class="card">
+    <label for="url">Official roster URL</label>
+    <div class="row">
+      <input id="url" value="https://hailstate.com/sports/football/roster">
+      <button id="build" class="primary">Build Roster</button>
+    </div>
+    <label class="check"><input id="bios" type="checkbox" checked> Fetch player bios and missing profile photos</label>
+    <div id="status" class="status">Ready.</div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><strong id="playerCount">0</strong><span>Players</span></div>
+    <div class="stat"><strong id="photoCount">0</strong><span>Photos</span></div>
+    <div class="stat"><strong id="bioCount">0</strong><span>Bios</span></div>
+  </div>
+
+  <div class="actions">
+    <button id="saveCsv" disabled>Save CSV</button>
+    <button id="saveJson" disabled>Save JSON</button>
+  </div>
+
+  <div class="card" style="margin-top:18px">
+    <div class="previewHead"><h2>Roster Preview</h2><input id="search" placeholder="Search players"></div>
+    <div id="preview" class="empty">No roster loaded.</div>
+  </div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+let roster=[];
+
+function esc(v=''){return String(v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+function setStatus(text,type=''){const e=$('status');e.textContent=text;e.className='status '+type}
+function updateStats(){
+  $('playerCount').textContent=roster.length;
+  $('photoCount').textContent=roster.filter(p=>p.image).length;
+  $('bioCount').textContent=roster.filter(p=>p.bio).length;
+  $('saveCsv').disabled=!roster.length;$('saveJson').disabled=!roster.length;
 }
+function render(){
+  const q=$('search').value.trim().toLowerCase();
+  const rows=roster.filter(p=>Object.values(p).join(' ').toLowerCase().includes(q));
+  if(!rows.length){$('preview').className='empty';$('preview').textContent=roster.length?'No matching players.':'No roster loaded.';return}
+  $('preview').className='tableWrap';
+  $('preview').innerHTML=`<table><thead><tr><th>#</th><th>Player</th><th>Pos</th><th>Class</th><th>Height</th><th>Weight</th><th>Hometown</th><th>Previous School</th><th>Photo</th><th>Bio</th></tr></thead><tbody>${rows.map(p=>`<tr>
+    <td>${esc(p.number)}</td><td>${p.profile?`<a href="${esc(p.profile)}" target="_blank" style="color:#fff">${esc(p.name)}</a>`:esc(p.name)}</td>
+    <td>${esc(p.position)}</td><td>${esc(p.class)}</td><td>${esc(p.height)}</td><td>${esc(p.weight)}</td>
+    <td>${esc(p.hometown)}</td><td>${esc(p.previousSchool)}</td>
+    <td>${p.image?`<img class="photo" src="${esc(p.image)}" alt="">`:''}</td><td class="bio">${esc(p.bio)}</td>
+  </tr>`).join('')}</tbody></table>`;
+}
+function download(name,type,text){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),500)}
+function csvCell(v){v=String(v??'');return /[",\n]/.test(v)?`"${v.replace(/"/g,'""')}"`:v}
+function saveCsv(){
+  const cols=['number','name','position','class','height','weight','hometown','previousSchool','image','profile','bio'];
+  const text=[cols.join(','),...roster.map(p=>cols.map(c=>csvCell(p[c])).join(','))].join('\n');
+  download('ncaa_roster.csv','text/csv;charset=utf-8',text);
+}
+function saveJson(){download('ncaa_roster.json','application/json',JSON.stringify(roster,null,2))}
+
+async function buildRoster(options={}){
+  const onProgress=typeof options.onProgress==='function'?options.onProgress:()=>{};
+  const url=$('url').value.trim();
+  if(!url){setStatus('Enter a roster URL.','bad');return}
+  $('build').disabled=true;roster=[];updateStats();render();
+  try{
+    onProgress('Connecting');
+    setStatus('Connecting to the official roster page…');
+    const res=await fetch('/api/build-roster',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({url,fetchProfiles:$('bios').checked})
+    });
+    let payload={};try{payload=await res.json()}catch{}
+    if(!res.ok)throw new Error(payload.error||`Roster service returned ${res.status}.`);
+    roster=Array.isArray(payload.players)?payload.players:[];
+    if(!roster.length)throw new Error('No players were found on that roster page.');
+    updateStats();render();
+    setStatus(`Roster built: ${roster.length} players loaded.`, 'good');
+    onProgress('Complete');
+  }catch(err){
+    setStatus(`Application error: ${err.message}`,'bad');
+  }finally{$('build').disabled=false}
+}
+
+$('build').onclick=()=>buildRoster({onProgress:()=>{}});
+$('saveCsv').onclick=saveCsv;$('saveJson').onclick=saveJson;$('search').oninput=render;
+</script>
+</body>
+</html>
